@@ -31,6 +31,7 @@ npm run setup
 _From Anthropic Academy lessons_
 
 ---
+
 ### Example 1 — PreToolUse: Block Sensitive File Reads
 
 **The Problem**
@@ -72,7 +73,6 @@ Claude receives the error message and moves on without ever seeing the file cont
 
 ---
 
-
 ### Example 2 — PostToolUse: TypeScript Typecheck
 
 **The Problem**
@@ -82,7 +82,6 @@ When Claude modifies a function signature, it often doesn't update all the place
 <img width="534" height="374" alt="DEBUG CONSOLE" src="https://github.com/user-attachments/assets/ffea0881-125c-4ed7-bdfc-48c4b89dc129" />
 
 <img width="423" height="374" alt="settings local json" src="https://github.com/user-attachments/assets/10c2eccc-4404-4136-936f-46af2f797f0e" />
-
 
 In this project, `src/schema.ts` exports:
 
@@ -123,6 +122,39 @@ A `PostToolUse` hook runs the TypeScript compiler across the entire project afte
 > This pattern works for any statically typed language. For untyped languages, running your automated test suite as a post-edit hook achieves similar coverage.
 
 <img width="549" height="401" alt="OUTPUT" src="https://github.com/user-attachments/assets/02a55e03-e5a8-4e48-b66d-733dd6de3ab3" />
+
+---
+
+### Example 3 — PreToolUse: Prevent Duplicate Queries
+
+**The Problem**
+
+Claude often adds new query functions without checking if similar ones already exist, leading to duplicate logic scattered across the codebase.
+
+**The Solution**
+
+A `PreToolUse` hook runs before every file write inside `src/queries/`. It sends the proposed change to Claude, which checks existing query files and blocks the edit if the functionality is already covered:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/query_hook.js",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+If a duplicate is found, the hook exits with code `2` and returns specific feedback — which existing function to use instead. If the change is appropriate, it exits with `0` and the edit proceeds.
 
 ---
 
