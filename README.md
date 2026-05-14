@@ -31,52 +31,7 @@ npm run setup
 _From Anthropic Academy lessons_
 
 ---
-
-### Example 1 — PostToolUse: TypeScript Typecheck
-
-**The Problem**
-
-When Claude modifies a function signature, it often doesn't update all the places where that function is called throughout the project. This leads to broken code that only surfaces at runtime.
-
-In this project, `src/schema.ts` exports:
-
-```typescript
-export async function createSchema(db: Database, verbose: boolean) {
-```
-
-If Claude changes this signature — say, removing the `verbose` parameter — it may not update `src/main.ts`, which calls `createSchema(db, false)`. The project silently breaks with no immediate feedback.
-
-**The Solution**
-
-A `PostToolUse` hook runs the TypeScript compiler across the entire project after every file edit:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "./node_modules/.bin/tsc --noEmit"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-`tsc --noEmit` type-checks the whole project without producing output files. If Claude's edit breaks a call site anywhere in the codebase, the hook immediately surfaces the error — giving Claude the feedback it needs to fix the issue in the same session.
-
-`hooks/tsc.js` in this project implements the same check using the TypeScript compiler API directly, parsing `tsconfig.json` and reporting all diagnostics back to Claude via `stderr` + exit code `2`.
-
-> This pattern works for any statically typed language. For untyped languages, running your automated test suite as a post-edit hook achieves similar coverage.
-
----
-
-### Example 2 — PreToolUse: Block Sensitive File Reads
+### Example 1 — PreToolUse: Block Sensitive File Reads
 
 **The Problem**
 
@@ -114,6 +69,60 @@ if (readPath.includes(".env")) {
 ```
 
 Claude receives the error message and moves on without ever seeing the file contents.
+
+---
+
+
+### Example 2 — PostToolUse: TypeScript Typecheck
+
+**The Problem**
+
+When Claude modifies a function signature, it often doesn't update all the places where that function is called throughout the project. This leads to broken code that only surfaces at runtime.
+
+<img width="534" height="374" alt="DEBUG CONSOLE" src="https://github.com/user-attachments/assets/ffea0881-125c-4ed7-bdfc-48c4b89dc129" />
+
+<img width="423" height="374" alt="settings local json" src="https://github.com/user-attachments/assets/10c2eccc-4404-4136-936f-46af2f797f0e" />
+
+
+In this project, `src/schema.ts` exports:
+
+```typescript
+export async function createSchema(db: Database, verbose: boolean) {
+```
+
+If Claude changes this signature — say, removing the `verbose` parameter — it may not update `src/main.ts`, which calls `createSchema(db, false)`. The project silently breaks with no immediate feedback.
+
+**The Solution**
+
+<img width="660" height="398" alt="shashi@Mac queries_COMPLETED " src="https://github.com/user-attachments/assets/4e56521d-f2d9-4142-acc5-79212280179b" />
+
+A `PostToolUse` hook runs the TypeScript compiler across the entire project after every file edit:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./node_modules/.bin/tsc --noEmit"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`tsc --noEmit` type-checks the whole project without producing output files. If Claude's edit breaks a call site anywhere in the codebase, the hook immediately surfaces the error — giving Claude the feedback it needs to fix the issue in the same session.
+
+`hooks/tsc.js` in this project implements the same check using the TypeScript compiler API directly, parsing `tsconfig.json` and reporting all diagnostics back to Claude via `stderr` + exit code `2`.
+
+> This pattern works for any statically typed language. For untyped languages, running your automated test suite as a post-edit hook achieves similar coverage.
+
+<img width="549" height="401" alt="OUTPUT" src="https://github.com/user-attachments/assets/02a55e03-e5a8-4e48-b66d-733dd6de3ab3" />
 
 ---
 
