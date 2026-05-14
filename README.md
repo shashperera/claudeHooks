@@ -30,15 +30,25 @@ npm run setup
 
 _From Anthropic Academy lessons_
 
-### The Problem
+---
 
-When Claude modifies a function signature, it often doesn't update all the places where that function is called throughout the project. This leads to broken code that only surfaces at runtime — or not at all until a type error is noticed.
+### Example 1 — PostToolUse: TypeScript Typecheck
 
-**Example:** Claude renames a parameter in `getOrderById(db, id)` but misses three other files that still call the old signature. No immediate error is shown, so the session ends with silently broken code.
+**The Problem**
 
-### The Solution — TypeScript Typecheck Hook
+When Claude modifies a function signature, it often doesn't update all the places where that function is called throughout the project. This leads to broken code that only surfaces at runtime.
 
-The fix is a `PostToolUse` hook that runs the TypeScript compiler across the entire project after every file edit:
+In this project, `src/schema.ts` exports:
+
+```typescript
+export async function createSchema(db: Database, verbose: boolean) {
+```
+
+If Claude changes this signature — say, removing the `verbose` parameter — it may not update `src/main.ts`, which calls `createSchema(db, false)`. The project silently breaks with no immediate feedback.
+
+**The Solution**
+
+A `PostToolUse` hook runs the TypeScript compiler across the entire project after every file edit:
 
 ```json
 {
@@ -58,11 +68,54 @@ The fix is a `PostToolUse` hook that runs the TypeScript compiler across the ent
 }
 ```
 
-Running `tsc --noEmit` type-checks the whole project without producing output files. If Claude's edit breaks a call site anywhere in the codebase, the hook surfaces the error immediately — giving Claude the feedback it needs to fix the issue in the same session.
+`tsc --noEmit` type-checks the whole project without producing output files. If Claude's edit breaks a call site anywhere in the codebase, the hook immediately surfaces the error — giving Claude the feedback it needs to fix the issue in the same session.
 
-This project uses the TypeScript compiler API directly in `hooks/tsc.js` to achieve the same effect, parsing `tsconfig.json` and reporting all diagnostics back to Claude via `stderr` + exit code `2`.
+`hooks/tsc.js` in this project implements the same check using the TypeScript compiler API directly, parsing `tsconfig.json` and reporting all diagnostics back to Claude via `stderr` + exit code `2`.
 
 > This pattern works for any statically typed language. For untyped languages, running your automated test suite as a post-edit hook achieves similar coverage.
+
+---
+
+### Example 2 — PreToolUse: Block Sensitive File Reads
+
+**The Problem**
+
+Claude reads files to understand context while completing tasks. Left unchecked, it could read sensitive files like `.env` that contain API keys, database credentials, or other secrets — even unintentionally.
+
+**The Solution**
+
+A `PreToolUse` hook intercepts every `Read` and `Grep` call before it executes and blocks access to `.env` files:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ./hooks/read_hook.js"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`hooks/read_hook.js` reads the tool input from `stdin`, checks the target file path, and exits with code `2` (blocking the tool call) if the path includes `.env`:
+
+```javascript
+if (readPath.includes(".env")) {
+  console.error("You cannot read the .env file");
+  process.exit(2);
+}
+```
+
+Claude receives the error message and moves on without ever seeing the file contents.
+
+---
 
 ### All Hooks in This Project
 
